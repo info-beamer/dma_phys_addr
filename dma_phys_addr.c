@@ -12,6 +12,8 @@
 #define CLASS_NAME "dma_buf_class"
 #define IOCTL_GET_PHYS_ADDR _IOR('d', 1, __u64)
 
+#define DIRECTION DMA_BIDIRECTIONAL
+
 static int major;
 static struct class *dma_buf_class;
 static struct device *dma_buf_device;
@@ -25,17 +27,18 @@ struct dma_buf_fd {
     struct dma_buf *dma_buf;
     struct dma_buf_attachment *attach;
     struct sg_table *sgt;
+    int sync;
 };
 
 static void dma_buf_fd_release(struct dma_buf_fd *dma_buf_fd) {
-    struct dma_buf *dma_buf = dma_buf_fd->dma_buf;
-    struct dma_buf_attachment *attach = dma_buf_fd->attach;
-    struct sg_table *sgt = dma_buf_fd->sgt;
-
-    dma_sync_sg_for_device(dma_buf_device, sgt->sgl, sgt->nents, DMA_BIDIRECTIONAL);
-    dma_buf_unmap_attachment(attach, sgt, DMA_BIDIRECTIONAL);
-    dma_buf_detach(dma_buf, attach);
-    dma_buf_put(dma_buf);
+    if (dma_buf_fd->sync)
+        dma_sync_sg_for_device(dma_buf_device, dma_buf_fd->sgt->sgl, dma_buf_fd->sgt->nents, DIRECTION);
+    if (dma_buf_fd->sgt)
+        dma_buf_unmap_attachment(dma_buf_fd->attach, dma_buf_fd->sgt, DIRECTION);
+    if (dma_buf_fd->attach)
+        dma_buf_detach(dma_buf_fd->dma_buf, dma_buf_fd->attach);
+    if (dma_buf_fd->dma_buf)
+        dma_buf_put(dma_buf_fd->dma_buf);
     kfree(dma_buf_fd);
 }
 
@@ -66,8 +69,8 @@ static long dma_buf_ioctl(struct file *file, unsigned int cmd, unsigned long arg
         return -ENOMEM;
 
     dma_buf_fd->dma_buf = dma_buf_get(user_data.fd);
-    if (!dma_buf_fd->dma_buf) {
-        ret = -EINVAL;
+    if (IS_ERR(dma_buf_fd->dma_buf)) {
+        ret = PTR_ERR(dma_buf_fd->dma_buf);
         goto error;
     }
 
@@ -77,7 +80,7 @@ static long dma_buf_ioctl(struct file *file, unsigned int cmd, unsigned long arg
         goto error;
     }
 
-    dma_buf_fd->sgt = dma_buf_map_attachment(dma_buf_fd->attach, DMA_BIDIRECTIONAL);
+    dma_buf_fd->sgt = dma_buf_map_attachment(dma_buf_fd->attach, DIRECTION);
     if (IS_ERR(dma_buf_fd->sgt)) {
         ret = PTR_ERR(dma_buf_fd->sgt);
         goto error;
@@ -88,7 +91,8 @@ static long dma_buf_ioctl(struct file *file, unsigned int cmd, unsigned long arg
         goto error;
     }
 
-    dma_sync_sg_for_cpu(dma_buf_device, dma_buf_fd->sgt->sgl, dma_buf_fd->sgt->nents, DMA_BIDIRECTIONAL);
+    dma_sync_sg_for_cpu(dma_buf_device, dma_buf_fd->sgt->sgl, dma_buf_fd->sgt->nents, DIRECTION);
+    dma_buf_fd->sync = 1;
 
     fd = anon_inode_getfd("dma_buf_fd", &dma_buf_fops, dma_buf_fd, O_CLOEXEC);
     if (fd < 0) {
@@ -100,7 +104,7 @@ static long dma_buf_ioctl(struct file *file, unsigned int cmd, unsigned long arg
     user_data.phys_addr = sg_dma_address(dma_buf_fd->sgt->sgl);
 
     if (copy_to_user((void __user *)arg, &user_data, sizeof(user_data)))
-        ret = -EFAULT;
+        return -EFAULT;
 
     return 0;
 error:
