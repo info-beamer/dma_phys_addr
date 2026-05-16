@@ -146,9 +146,11 @@ static int __init dma_buf_init(void) {
         return err;
     }
 
-    dma_buf_device->dma_parms = devm_kzalloc(dma_buf_device,
-                                       sizeof(*dma_buf_device->dma_parms),
-                                       GFP_KERNEL);
+    dma_buf_device->dma_parms = devm_kzalloc(
+        dma_buf_device,
+        sizeof(*dma_buf_device->dma_parms),
+        GFP_KERNEL
+    );
     dma_set_max_seg_size(dma_buf_device, 0x3FFFFFFF);
     pr_info("dma_buf_phys driver loaded\n");
     return 0;
@@ -164,7 +166,7 @@ static void __exit dma_buf_exit(void) {
 module_init(dma_buf_init);
 module_exit(dma_buf_exit);
 
-MODULE_IMPORT_NS(DMA_BUF);
+MODULE_IMPORT_NS("DMA_BUF");
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Florian Wesch <fw@info-beamer.com>");
 MODULE_DESCRIPTION("A Linux kernel driver to get physical address of dma_buf");
