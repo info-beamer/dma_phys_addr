@@ -2,7 +2,8 @@ obj-m := dma_phys_addr.o
 
 ARCH := arm64
 CROSS_COMPILE := aarch64-linux-gnu-
-KDIR := /root/kernel-arm64/build/ # Change this to your ARM64 kernel headers path
+# KDIR := /root/kernel-arm64/build/ # Change this to your ARM64 kernel headers path
+KDIR := /usr/src/linux-headers-$(shell uname -r)/
 PWD := $(shell pwd)
 EXTRA_CFLAGS += -DMODULE -D__KERNEL__
 
